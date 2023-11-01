@@ -1,31 +1,47 @@
+#!/usr/bin/env groovy
+def imageId = "use-name/image-name:1.$BUILD_NUMBER"
 pipeline {
-  agent {
-    label 'docker'  # separate agent (launched as JAR on host machine) to avoid running docker inside docker
-  }
-  environment {
-    imageId = 'use-name/image-name:1.$BUILD_NUMBER'
-    docker_registry = 'your_docker_registry'
-    docker_creds = credentials('your_docker_registry_creds')
-  }
-  stages {
-    stage('Docker build') {
-      steps {
-        sh "docker build --no-cache --force-rm -t ${imageId} ."
-      }
+    agent {
+        label 'docker'  # separate agent (launched as JAR on host machine) to avoid running docker inside docker
     }
-    stage('Docker push') {
-      steps {
-        sh'''
-          docker login $docker_registry --username $docker_creds_USR --password $docker_creds_PSW
-          docker push $imageId
-          docker logout
-        '''
-      }
+    stages {
+        stage('Test') {
+            steps {
+                script {
+                    sh "docker build --no-cache --target test -t ${imageId} ."
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                script {
+                    sh "docker build --target build -t ${imageId} ."
+                }
+            }
+        }
+        stage('Image') {
+            steps {
+                script {
+                    sh "docker build --target final -t ${imageId} ."
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script {
+                    docker.withRegistry('' , 'dockerhub') {
+                        dockerImage = docker.build("${imageId}")
+                        dockerImage.push()
+                    }
+                }
+            }
+        }
+        stage('Clean') {
+          steps{
+            sh "docker rmi ${imageId}"
+          }
+        }
     }
-    stage('Clean') {
-      steps{
-        sh "docker rmi ${imageId}"
-      }
-    }
-  }
 }
+
+   
